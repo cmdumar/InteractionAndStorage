@@ -6,4 +6,8 @@
     <string name="note_content">Note Content</string>
     <string name="warning_empty">Please enter a note name and content.</string>
     <string name="note_deleted">Note successfully deleted.</string>
+    <string name="storage_select_title">Select storage</string>
+    <string name="storage_option_shared_prefs">Shared Preferences</string>
+    <string name="storage_option_file">File Storage</string>
+    <string name="storage_subtitle">Storage: %1$s</string>
 </resources>

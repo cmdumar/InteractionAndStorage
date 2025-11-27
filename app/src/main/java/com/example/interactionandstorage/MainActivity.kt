@@ -1,69 +1,128 @@
 package com.example.interactionandstorage
 
-class MainActivity : AppCompatActivity() {
-    private var notesListView: ListView? = null
-    private var notesList: ArrayList<String>? = null
-    private var notesAdapter: ArrayAdapter<String>? = null
+import android.content.Intent
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ArrayAdapter
+import android.widget.ListView
+import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 
-    @Override
-    protected fun onCreate(savedInstanceState: Bundle?) {
+class MainActivity : AppCompatActivity() {
+    private lateinit var notesListView: ListView
+    private val notesList: MutableList<Note> = mutableListOf()
+    private lateinit var notesAdapter: NotesAdapter
+
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         notesListView = findViewById(R.id.notesListView)
-        notesList = ArrayList()
-        notesAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, notesList)
-        notesListView.setAdapter(notesAdapter)
+        notesAdapter = NotesAdapter(this, notesList)
+        notesListView.adapter = notesAdapter
 
-        // Load notes from SharedPreferences or File Storage
         loadNotes()
+        updateStorageSubtitle()
 
-        // Set up ListView item click listener for deletion
-        notesListView.setOnItemClickListener({ parent, view, position, id ->
-            val selectedNote: String = notesList.get(position)
-            val intent: Intent = Intent(this@MainActivity, DeleteNoteActivity::class.java)
+        notesListView.setOnItemClickListener { _, _, position, _ ->
+            val selectedNote: String = notesList[position].name
+            val intent = Intent(this@MainActivity, DeleteNoteActivity::class.java)
             intent.putExtra("note_name", selectedNote)
             startActivity(intent)
-        })
+        }
     }
 
-    @Override
-    fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        getMenuInflater().inflate(R.menu.main_menu, menu)
+    override fun onResume() {
+        super.onResume()
+        loadNotes()
+        updateStorageSubtitle()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
         return true
     }
 
-    @Override
-    fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.getItemId()) {
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
             R.id.action_add_note -> {
                 startActivity(Intent(this@MainActivity, AddNoteActivity::class.java))
-                return true
+                true
             }
 
             R.id.action_delete_note -> {
                 startActivity(Intent(this@MainActivity, DeleteNoteActivity::class.java))
-                return true
+                true
             }
 
-            else -> return super.onOptionsItemSelected(item)
+            R.id.action_choose_storage -> {
+                showStorageChooser()
+                true
+            }
+
+            else -> super.onOptionsItemSelected(item)
         }
     }
 
     private fun loadNotes() {
-        // Load the notes from the selected storage method (SharedPreferences or File)
-        val sharedPreferences: SharedPreferences = getSharedPreferences("notes_prefs", MODE_PRIVATE)
-        val notesJson: String = sharedPreferences.getString("notes", "[]")
+        val notes = NotesRepository.loadNotes(this)
+        notesList.clear()
+        notesList.addAll(notes)
+        notesAdapter.notifyDataSetChanged()
+    }
 
-        // Use a JSON parser to convert the stored string to a list
-        try {
-            val notesArray: JSONArray = JSONArray(notesJson)
-            for (i in 0 until notesArray.length()) {
-                notesList.add(notesArray.getString(i))
+    private fun showStorageChooser() {
+        val types = NotesRepository.StorageType.values()
+        val labels = types.map { getStorageLabel(it) }.toTypedArray()
+        val currentIndex = types.indexOf(NotesRepository.getStorageType(this))
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.storage_select_title)
+            .setSingleChoiceItems(labels, currentIndex) { dialog, which ->
+                val selectedType = types[which]
+                NotesRepository.setStorageType(this, selectedType)
+                loadNotes()
+                updateStorageSubtitle()
+                dialog.dismiss()
             }
-            notesAdapter.notifyDataSetChanged()
-        } catch (e: JSONException) {
-            e.printStackTrace()
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun getStorageLabel(type: NotesRepository.StorageType): String {
+        return when (type) {
+            NotesRepository.StorageType.SHARED_PREFERENCES -> getString(R.string.storage_option_shared_prefs)
+            NotesRepository.StorageType.FILE -> getString(R.string.storage_option_file)
+        }
+    }
+
+    private fun updateStorageSubtitle() {
+        val currentLabel = getStorageLabel(NotesRepository.getStorageType(this))
+        supportActionBar?.subtitle = getString(R.string.storage_subtitle, currentLabel)
+    }
+
+    private class NotesAdapter(
+        context: MainActivity,
+        items: MutableList<Note>
+    ) : ArrayAdapter<Note>(context, 0, items) {
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val view = convertView ?: LayoutInflater.from(context)
+                .inflate(R.layout.item_note, parent, false)
+
+            val titleTextView = view.findViewById<TextView>(R.id.noteTitleTextView)
+            val contentTextView = view.findViewById<TextView>(R.id.noteContentTextView)
+
+            val note = getItem(position)
+            titleTextView.text = note?.name.orEmpty()
+            contentTextView.text = note?.content.orEmpty()
+
+            return view
         }
     }
 }
